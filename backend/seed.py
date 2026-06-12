@@ -4,7 +4,7 @@ import logging
 
 from db import db
 from core import now_iso, gen_id, hash_password, verify_password
-from constants import STOCK_AVATARS, STOCK_VOICES, SAMPLE_VIDEOS, PLAN_CREDITS
+from constants import STOCK_AVATARS, STOCK_VOICES, PLAN_CREDITS, OPENAI_VOICE_FALLBACK
 
 logger = logging.getLogger(__name__)
 
@@ -14,13 +14,14 @@ async def seed_org_stock(org_id: str, user_id: str):
         await db.avatars.insert_one({
             "id": gen_id("avt"), "organization_id": org_id, "name": a["name"], "status": "ready",
             "source_type": "stock", "thumbnail_url": a["thumbnail_url"],
-            "preview_video_url": random.choice(SAMPLE_VIDEOS), "metadata": {"gender": a["gender"]},
+            "preview_video_url": None, "metadata": {"gender": a["gender"]},
             "is_stock": True, "created_by": user_id, "created_at": now_iso(), "updated_at": now_iso(),
         })
     for v in STOCK_VOICES:
         await db.voices.insert_one({
             "id": gen_id("vce"), "organization_id": org_id, "name": v["name"], "status": "ready",
-            "engine": v["engine"], "language": v["language"], "gender": v["gender"],
+            "engine": v["engine"], "openai_voice": v["openai_voice"],
+            "language": v["language"], "gender": v["gender"],
             "sample_audio_url": None, "is_stock": True, "created_by": user_id, "created_at": now_iso(),
         })
     await db.projects.insert_one({
@@ -67,3 +68,15 @@ async def seed_admin():
         logger.info("Seeded admin user")
     elif not verify_password(password, existing.get("hashed_password", "")):
         await db.users.update_one({"email": email}, {"$set": {"hashed_password": hash_password(password)}})
+
+
+async def migrate_voices():
+    """Map legacy xtts/f5-tts voices to real OpenAI TTS voices."""
+    name_map = {v["name"]: v["openai_voice"] for v in STOCK_VOICES}
+    count = 0
+    async for v in db.voices.find({"openai_voice": {"$exists": False}}):
+        ov = name_map.get(v.get("name")) or OPENAI_VOICE_FALLBACK.get(v.get("gender") or "", "alloy")
+        await db.voices.update_one({"id": v["id"]}, {"$set": {"engine": "openai_tts", "openai_voice": ov}})
+        count += 1
+    if count:
+        logger.info(f"Migrated {count} legacy voices to openai_tts")

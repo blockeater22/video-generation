@@ -101,3 +101,8 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+user_problem_statement: HeyGen-competitor AI avatar SaaS. User rejected the mocked sample-video pipeline; replaced with REAL generation engine (OpenAI TTS via Emergent key + ffmpeg audio-driven avatar lip animation). Also completed Phase 2 API surface (voice preview, v1 webhooks/videos extras), custom avatar upload (Phase 4 lite), webhook retry with backoff.
+
+agent_communication:
+    - agent: "main"
+      message: "Replaced mocked pipeline with real engine: backend/engine/tts.py (OpenAI TTS), backend/engine/renderer.py (cv2 face detect + jaw animation + ffmpeg), pipeline.py rewritten (priority queue workers, credit enforcement, webhook retries w/ backoff). New endpoints: POST /api/voices/{id}/preview, POST /api/avatars/upload (multipart), v1: DELETE/retry videos, voices preview, webhooks CRUD/test/deliveries. Static media at /api/media. Verified e2e manually: video vid_14bc731735c44361 completed (h264 720p, captions+watermark, real speech). Voice preview mp3 works. Needs full regression: backend + frontend."

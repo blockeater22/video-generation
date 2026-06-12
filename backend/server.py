@@ -7,10 +7,13 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 from fastapi import FastAPI, APIRouter
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 
 from db import db, get_client
-from seed import seed_admin
+from seed import seed_admin, migrate_voices
+from media_store import MEDIA_ROOT
+from pipeline import ensure_workers
 from routers import auth, orgs, projects, avatars, voices, videos, api_keys, webhooks, developer, billing
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -40,6 +43,7 @@ api.include_router(billing.webhook_router)  # -> /api/webhook/stripe
 
 app.include_router(api)
 app.include_router(developer.router)  # developer.router already prefixed with /api/v1
+app.mount("/api/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")  # generated videos/audio/avatars
 
 # CORS: avoid the invalid "*" + allow_credentials combo. When CORS_ORIGINS is "*",
 # reflect any origin via regex (valid with credentials); otherwise use the explicit list.
@@ -66,6 +70,8 @@ else:
 async def startup():
     await db.users.create_index("email", unique=True)
     await seed_admin()
+    await migrate_voices()
+    ensure_workers()
     logger.info("Startup complete")
 
 

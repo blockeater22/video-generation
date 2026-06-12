@@ -85,6 +85,9 @@ export default function Videos() {
               <div className="p-4">
                 <div className="font-medium truncate">{v.title}</div>
                 <div className="text-xs text-muted-foreground font-mono mt-1">{v.resolution} · {v.aspect_ratio} · {fmtDate(v.created_at)}</div>
+                {v.status === "failed" && v.error_message && (
+                  <p className="text-xs text-red-400 mt-1.5 line-clamp-2" data-testid={`video-error-${v.id}`}>{v.error_message}</p>
+                )}
                 <div className="flex items-center gap-2 mt-3">
                   {v.status === "completed" && (
                     <Button size="sm" variant="secondary" className="gap-1.5 flex-1" onClick={() => window.open(v.output_url, "_blank")} data-testid={`video-download-${v.id}`}>

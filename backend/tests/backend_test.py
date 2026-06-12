@@ -82,7 +82,7 @@ class TestPasswordReset:
         async def fetch():
             c = AsyncIOMotorClient(mongo_url)
             db = c[db_name]
-            u = await db.users.find_one({"email": email})
+            u = await db.users.find_one({"email": email.lower().strip()})
             rec = await db.password_reset_tokens.find_one({"user_id": u["id"], "used": False})
             c.close()
             return rec["token"]
@@ -134,8 +134,8 @@ class TestCRUD:
 
     def test_voice_create_delete(self, admin_headers):
         r = requests.post(f"{API}/voices", headers=admin_headers,
-                          json={"name": "TEST_v", "engine": "neural", "language": "en", "gender": "female"})
-        assert r.status_code == 200
+                          json={"name": "TEST_v", "engine": "openai_tts", "language": "en", "gender": "female"})
+        assert r.status_code == 200, r.text
         vid = r.json()["id"]
         d = requests.delete(f"{API}/voices/{vid}", headers=admin_headers)
         assert d.status_code == 204
@@ -160,24 +160,37 @@ class TestVideos:
         me_before = requests.get(f"{API}/auth/me", headers=admin_headers).json()
         credits_before = me_before["org"].get("credits_used", 0)
 
-        payload = {"avatar_id": avs[0]["id"], "voice_id": vcs[0]["id"], "script": "TEST hello",
-                   "title": "TEST_v", "resolution": "1080p", "aspect_ratio": "16:9",
-                   "background_type": "color", "background_value": "#000"}
+        payload = {"avatar_id": avs[0]["id"], "voice_id": vcs[0]["id"], "script": "TEST hello world this is a real generation",
+                   "title": "TEST_v", "resolution": "720p", "aspect_ratio": "16:9",
+                   "background_type": "solid", "background_value": "#000"}
         c = requests.post(f"{API}/videos", headers=admin_headers, json=payload)
         assert c.status_code == 202, c.text
         vid = c.json()["id"]
         assert c.json()["status"] == "queued"
 
         completed = None
-        for _ in range(25):
+        for _ in range(90):
             time.sleep(1)
             g = requests.get(f"{API}/videos/{vid}", headers=admin_headers).json()
             if g["status"] == "completed":
                 completed = g
                 break
-        assert completed, "video did not complete in 25s"
+            if g["status"] == "failed":
+                pytest.fail(f"video failed: {g.get('error_message')}")
+        assert completed, "video did not complete in 90s"
         assert completed["output_url"]
-        assert completed["duration_seconds"] is not None
+        # Output must be served from platform's /api/media path (not stock URLs)
+        assert "/api/media/videos/" in completed["output_url"], f"unexpected output_url: {completed['output_url']}"
+        assert completed["duration_seconds"] and completed["duration_seconds"] > 0
+        assert completed.get("thumbnail_url")
+
+        # Download mp4 and check size
+        dl_url = completed["output_url"]
+        if dl_url.startswith("/"):
+            dl_url = BASE_URL + dl_url
+        dl = requests.get(dl_url)
+        assert dl.status_code == 200
+        assert len(dl.content) > 50_000, f"mp4 too small: {len(dl.content)}"
 
         me_after = requests.get(f"{API}/auth/me", headers=admin_headers).json()
         assert me_after["org"].get("credits_used", 0) > credits_before
@@ -219,9 +232,9 @@ class TestApiKeys:
         avs = requests.get(f"{API}/avatars", headers=admin_headers).json()
         vcs = requests.get(f"{API}/voices", headers=admin_headers).json()
         post = requests.post(f"{BASE_URL}/api/v1/videos", headers=h, json={
-            "avatar_id": avs[0]["id"], "voice_id": vcs[0]["id"], "script": "TEST_v1",
-            "resolution": "1080p", "aspect_ratio": "16:9",
-            "background_type": "color", "background_value": "#fff"})
+            "avatar_id": avs[0]["id"], "voice_id": vcs[0]["id"], "script": "TEST_v1 hello dev",
+            "resolution": "720p", "aspect_ratio": "16:9",
+            "background_type": "solid", "background_value": "#fff"})
         assert post.status_code == 202, post.text
 
         d = requests.delete(f"{API}/api-keys/{kid}", headers=admin_headers)

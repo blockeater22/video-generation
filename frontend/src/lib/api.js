@@ -43,11 +43,13 @@ export const api = {
   // avatars
   listAvatars: () => client.get("/avatars").then((r) => r.data),
   createAvatar: (body) => client.post("/avatars", body).then((r) => r.data),
+  uploadAvatar: (form) => client.post("/avatars/upload", form).then((r) => r.data),
   deleteAvatar: (id) => client.delete(`/avatars/${id}`),
 
   // voices
   listVoices: () => client.get("/voices").then((r) => r.data),
   createVoice: (body) => client.post("/voices", body).then((r) => r.data),
+  previewVoice: (id) => client.post(`/voices/${id}/preview`).then((r) => r.data),
   deleteVoice: (id) => client.delete(`/voices/${id}`),
 
   // videos

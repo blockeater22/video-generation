@@ -128,7 +128,7 @@ export default function Editor() {
             <Select value={voiceId || ""} onValueChange={setVoiceId}>
               <SelectTrigger data-testid="editor-voice-select"><SelectValue placeholder="Select voice" /></SelectTrigger>
               <SelectContent>
-                {voices?.map((v) => <SelectItem key={v.id} value={v.id}>{v.name} · {v.language} · {v.engine}</SelectItem>)}
+                {voices?.map((v) => <SelectItem key={v.id} value={v.id}>{v.name} · {v.language} · {v.openai_voice || v.engine}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -141,14 +141,22 @@ export default function Editor() {
               {job?.status === "completed" ? (
                 <video src={job.output_url} controls autoPlay className="h-full w-full object-contain bg-black" data-testid="editor-preview-video" />
               ) : jobId && job ? (
-                <div className="text-center">
+                <div className="text-center w-full px-10">
                   {job.status === "failed" ? (
-                    <StatusBadge status="failed" />
+                    <>
+                      <StatusBadge status="failed" />
+                      {job.error_message && <p className="text-xs text-red-400 mt-3 max-w-md mx-auto" data-testid="editor-error-message">{job.error_message}</p>}
+                    </>
                   ) : (
                     <>
                       <Loader2 className="mx-auto animate-spin text-accent mb-3" size={32} />
                       <div className="mb-2"><StatusBadge status={job.status} /></div>
-                      <p className="text-sm text-muted-foreground">Rendering your avatar video…</p>
+                      <p className="text-sm text-muted-foreground" data-testid="editor-stage-text">
+                        {{ queued: "Waiting in queue…", tts: "Generating real speech…", render: "Animating your avatar…", compose: "Finalizing video…" }[job.pipeline_stage] || "Rendering your avatar video…"}
+                      </p>
+                      <div className="h-1.5 w-56 mx-auto mt-3 rounded-full bg-secondary overflow-hidden">
+                        <div className="h-full bg-accent transition-all duration-700" style={{ width: `${job.progress || 5}%` }} data-testid="editor-progress-bar" />
+                      </div>
                     </>
                   )}
                 </div>

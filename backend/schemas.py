@@ -47,7 +47,8 @@ class VoiceCreate(BaseModel):
     name: str
     language: str = "en"
     gender: Optional[str] = None
-    engine: Literal["xtts", "f5-tts", "elevenlabs"] = "xtts"
+    engine: Literal["openai_tts", "xtts", "f5-tts", "elevenlabs"] = "openai_tts"
+    openai_voice: Literal["alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"] = "alloy"
     sample_audio_url: Optional[str] = None
 
 

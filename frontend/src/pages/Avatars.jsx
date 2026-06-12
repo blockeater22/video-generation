@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { Plus, Trash2, Sparkles, Upload } from "lucide-react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import StatusBadge from "@/components/StatusBadge";
-import api from "@/lib/api";
+import api, { formatApiError } from "@/lib/api";
 
 const SAMPLE_THUMBS = [
   "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&q=80",
@@ -21,24 +21,43 @@ const SAMPLE_THUMBS = [
 
 export default function Avatars() {
   const qc = useQueryClient();
+  const fileRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [thumb, setThumb] = useState("");
+  const [fileObj, setFileObj] = useState(null);
 
   const { data, isLoading } = useQuery({ queryKey: ["avatars"], queryFn: api.listAvatars, refetchInterval: 4000 });
 
-  const create = useMutation({
-    mutationFn: api.createAvatar,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["avatars"] });
-      toast.success("Avatar is processing");
-      setOpen(false); setName(""); setThumb("");
-    },
-  });
+  const onCreated = (a) => {
+    qc.invalidateQueries({ queryKey: ["avatars"] });
+    if (a?.metadata?.face_detected === false) {
+      toast.warning("Avatar created, but no face was detected — lip animation may be limited.");
+    } else {
+      toast.success("Avatar ready");
+    }
+    setOpen(false); setName(""); setThumb(""); setFileObj(null);
+  };
+  const onError = (e) => toast.error(formatApiError(e?.response?.data?.detail));
+
+  const create = useMutation({ mutationFn: api.createAvatar, onSuccess: onCreated, onError });
+  const upload = useMutation({ mutationFn: api.uploadAvatar, onSuccess: onCreated, onError });
   const del = useMutation({
     mutationFn: api.deleteAvatar,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["avatars"] }); toast.success("Avatar deleted"); },
   });
+
+  const submit = () => {
+    if (fileObj) {
+      const fd = new FormData();
+      fd.append("name", name);
+      fd.append("file", fileObj);
+      upload.mutate(fd);
+    } else {
+      create.mutate({ name, source_type: "image", thumbnail_url: thumb || undefined });
+    }
+  };
+  const busy = create.isPending || upload.isPending;
 
   return (
     <div className="space-y-6" data-testid="avatars-page">
@@ -59,25 +78,43 @@ export default function Avatars() {
                 <Input data-testid="avatar-name-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. My Presenter" />
               </div>
               <div>
-                <Label className="mb-1.5 block">Source image URL <span className="text-muted-foreground">(optional)</span></Label>
-                <Input data-testid="avatar-thumb-input" value={thumb} onChange={(e) => setThumb(e.target.value)} placeholder="https://..." />
-                <div className="flex gap-2 mt-2">
-                  {SAMPLE_THUMBS.map((t) => (
-                    <button key={t} onClick={() => setThumb(t)} className={`h-12 w-12 rounded overflow-hidden border-2 ${thumb === t ? "border-accent" : "border-transparent"}`}>
-                      <img src={t} alt="" className="h-full w-full object-cover" />
-                    </button>
-                  ))}
-                </div>
+                <Label className="mb-1.5 block">Upload a photo <span className="text-muted-foreground">(recommended)</span></Label>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  data-testid="avatar-file-input"
+                  onChange={(e) => { setFileObj(e.target.files?.[0] || null); setThumb(""); }}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  data-testid="avatar-file-trigger"
+                  className={`w-full border border-dashed rounded-md py-5 flex flex-col items-center gap-1.5 transition-colors ${fileObj ? "border-accent bg-accent/5" : "border-border hover:border-accent/50"}`}
+                >
+                  <Upload size={18} className="text-accent" />
+                  <span className="text-sm">{fileObj ? fileObj.name : "Choose a clear, front-facing photo"}</span>
+                  <span className="text-xs text-muted-foreground">JPEG / PNG · min 256×256 · max 15MB</span>
+                </button>
               </div>
+              {!fileObj && (
+                <div>
+                  <Label className="mb-1.5 block">Or use an image URL</Label>
+                  <Input data-testid="avatar-thumb-input" value={thumb} onChange={(e) => setThumb(e.target.value)} placeholder="https://..." />
+                  <div className="flex gap-2 mt-2">
+                    {SAMPLE_THUMBS.map((t) => (
+                      <button key={t} onClick={() => setThumb(t)} className={`h-12 w-12 rounded overflow-hidden border-2 ${thumb === t ? "border-accent" : "border-transparent"}`}>
+                        <img src={t} alt="" className="h-full w-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
-              <Button
-                data-testid="avatar-submit-btn"
-                disabled={!name || create.isPending}
-                onClick={() => create.mutate({ name, source_type: "image", thumbnail_url: thumb || undefined })}
-                className="bg-accent text-white hover:bg-accent/90"
-              >
-                {create.isPending ? "Creating..." : "Create Avatar"}
+              <Button data-testid="avatar-submit-btn" disabled={!name || busy} onClick={submit} className="bg-accent text-white hover:bg-accent/90">
+                {busy ? "Creating..." : "Create Avatar"}
               </Button>
             </DialogFooter>
           </DialogContent>

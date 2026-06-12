@@ -1,12 +1,8 @@
 PLAN_CREDITS = {"free": 3, "starter": 50, "pro": 300, "enterprise": 1_000_000}
 PLAN_PRICES = {"starter": 29.00, "pro": 99.00}
 
-SAMPLE_VIDEOS = [
-    "https://www.w3schools.com/html/mov_bbb.mp4",
-    "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
-    "https://media.w3.org/2010/05/sintel/trailer.mp4",
-    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
-]
+OPENAI_VOICES = ["alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]
+OPENAI_VOICE_FALLBACK = {"female": "nova", "male": "onyx"}
 
 STOCK_AVATARS = [
     {"name": "Sofia (Professional)", "thumbnail_url": "https://images.unsplash.com/photo-1573497161161-c3e73707e25c?w=600&q=80", "gender": "female"},
@@ -18,10 +14,10 @@ STOCK_AVATARS = [
 ]
 
 STOCK_VOICES = [
-    {"name": "Emma", "language": "en", "gender": "female", "engine": "xtts"},
-    {"name": "James", "language": "en", "gender": "male", "engine": "xtts"},
-    {"name": "Sophie", "language": "en", "gender": "female", "engine": "f5-tts"},
-    {"name": "Carlos", "language": "es", "gender": "male", "engine": "xtts"},
-    {"name": "Yuki", "language": "ja", "gender": "female", "engine": "xtts"},
-    {"name": "Liam", "language": "en", "gender": "male", "engine": "f5-tts"},
+    {"name": "Emma", "language": "en", "gender": "female", "engine": "openai_tts", "openai_voice": "nova"},
+    {"name": "James", "language": "en", "gender": "male", "engine": "openai_tts", "openai_voice": "onyx"},
+    {"name": "Sophie", "language": "en", "gender": "female", "engine": "openai_tts", "openai_voice": "shimmer"},
+    {"name": "Carlos", "language": "es", "gender": "male", "engine": "openai_tts", "openai_voice": "echo"},
+    {"name": "Yuki", "language": "ja", "gender": "female", "engine": "openai_tts", "openai_voice": "coral"},
+    {"name": "Liam", "language": "en", "gender": "male", "engine": "openai_tts", "openai_voice": "ash"},
 ]

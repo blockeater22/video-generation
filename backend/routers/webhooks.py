@@ -6,7 +6,6 @@ from db import db
 from core import now_iso, gen_id
 from deps import get_current_org, clean
 from pipeline import deliver_webhooks
-from constants import SAMPLE_VIDEOS
 from schemas import WebhookCreate
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -47,5 +46,5 @@ async def test_webhook(wid: str, org: dict = Depends(get_current_org)):
     if not hook:
         raise HTTPException(status_code=404, detail="Webhook not found")
     await deliver_webhooks(org["id"], "video.completed", {"video": {"id": "vid_test", "status": "completed",
-                           "output_url": SAMPLE_VIDEOS[0], "duration_seconds": 12.3}})
+                           "output_url": "https://example.com/videos/vid_test.mp4", "duration_seconds": 12.3}})
     return {"message": "Test event dispatched"}
