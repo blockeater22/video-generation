@@ -2,10 +2,10 @@ PLAN_CREDITS = {"free": 3, "starter": 50, "pro": 300, "enterprise": 1_000_000}
 PLAN_PRICES = {"starter": 29.00, "pro": 99.00}
 
 SAMPLE_VIDEOS = [
+    "https://www.w3schools.com/html/mov_bbb.mp4",
+    "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
     "https://media.w3.org/2010/05/sintel/trailer.mp4",
-    "https://download.samplelib.com/mp4/sample-10s.mp4",
-    "https://download.samplelib.com/mp4/sample-15s.mp4",
-    "https://download.samplelib.com/mp4/sample-20s.mp4",
+    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
 ]
 
 STOCK_AVATARS = [
