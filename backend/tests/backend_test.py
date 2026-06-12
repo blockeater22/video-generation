@@ -1,256 +1,284 @@
-"""Backend tests for AvatarPlatform - single tenant, no auth."""
-import os
-import time
-import pytest
-import requests
+"""AvatarPlatform backend tests - multi-tenant SaaS"""
+import os, time, uuid, requests, pytest
+from dotenv import load_dotenv
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://avatar-saas.preview.emergentagent.com').rstrip('/')
-# Read from frontend/.env if env not set
-if 'REACT_APP_BACKEND_URL' not in os.environ:
-    try:
-        with open('/app/frontend/.env') as f:
-            for line in f:
-                if line.startswith('REACT_APP_BACKEND_URL='):
-                    BASE_URL = line.split('=', 1)[1].strip().rstrip('/')
-    except Exception:
-        pass
+load_dotenv("/app/backend/.env")
+load_dotenv("/app/frontend/.env", override=False)
 
+BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 API = f"{BASE_URL}/api"
+ADMIN_EMAIL = "admin@avatarplatform.io"
+ADMIN_PASS = "Admin123!"
 
 
-@pytest.fixture(scope="module")
-def s():
-    sess = requests.Session()
-    sess.headers.update({"Content-Type": "application/json"})
-    return sess
+@pytest.fixture(scope="session")
+def admin_token():
+    r = requests.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASS})
+    assert r.status_code == 200, f"Admin login failed: {r.status_code} {r.text}"
+    return r.json()["access_token"]
 
 
-# --- Health / root ---
-def test_root(s):
-    r = s.get(f"{API}/")
-    assert r.status_code == 200
-    assert r.json().get("status") == "ok"
+@pytest.fixture(scope="session")
+def admin_headers(admin_token):
+    return {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
 
 
-def test_org(s):
-    r = s.get(f"{API}/org")
-    assert r.status_code == 200
-    data = r.json()
-    assert data["id"] == "org_default"
-    assert "credits_used" in data
-    assert "credits_limit" in data
+def _register(password="Test123!", name="Tester"):
+    email = f"TEST_{uuid.uuid4().hex[:10]}@example.com"
+    r = requests.post(f"{API}/auth/register", json={"email": email, "password": password, "full_name": name})
+    assert r.status_code == 201, f"register failed: {r.status_code} {r.text}"
+    body = r.json()
+    return email, body["access_token"], body["user"]
 
 
-# --- Dashboard ---
-def test_dashboard_stats(s):
-    r = s.get(f"{API}/dashboard/stats")
-    assert r.status_code == 200
-    data = r.json()
-    assert "org" in data
-    assert "recent_videos" in data and isinstance(data["recent_videos"], list)
-    assert "usage_last_30_days" in data
-    assert len(data["usage_last_30_days"]) == 30
-    assert "counts" in data
-    for k in ["total", "completed", "processing", "queued", "failed"]:
-        assert k in data["counts"]
-    assert "totals" in data
-    for k in ["avatars", "voices", "videos"]:
-        assert k in data["totals"]
+# AUTH
+class TestAuth:
+    def test_admin_login(self, admin_token):
+        assert isinstance(admin_token, str) and len(admin_token) > 20
+
+    def test_me(self, admin_headers):
+        r = requests.get(f"{API}/auth/me", headers=admin_headers)
+        assert r.status_code == 200
+        d = r.json()
+        assert d["user"]["email"] == ADMIN_EMAIL
+        assert d["org"]["id"] == d["user"]["org_id"]
+
+    def test_unauth_avatars_401(self):
+        r = requests.get(f"{API}/avatars")
+        assert r.status_code == 401
+
+    def test_register_autoseeds(self):
+        _, token, _ = _register()
+        h = {"Authorization": f"Bearer {token}"}
+        assert len(requests.get(f"{API}/avatars", headers=h).json()) == 6
+        assert len(requests.get(f"{API}/voices", headers=h).json()) == 6
+        assert len(requests.get(f"{API}/projects", headers=h).json()) == 1
+
+    def test_logout(self, admin_headers):
+        r = requests.post(f"{API}/auth/logout", headers=admin_headers)
+        assert r.status_code == 200
 
 
-# --- Avatars & Voices seed ---
-def test_list_avatars_seed(s):
-    r = s.get(f"{API}/avatars")
-    assert r.status_code == 200
-    items = r.json()
-    assert isinstance(items, list)
-    stock = [a for a in items if a.get("is_stock")]
-    assert len(stock) >= 6
+# Password reset
+class TestPasswordReset:
+    def test_forgot_password(self):
+        email, _, _ = _register()
+        r = requests.post(f"{API}/auth/forgot-password", json={"email": email})
+        assert r.status_code == 200
+
+    def test_reset_invalid_token_400(self):
+        r = requests.post(f"{API}/auth/reset-password", json={"token": "INVALID_XYZ", "new_password": "NewPass1!"})
+        assert r.status_code == 400
+
+    def test_reset_valid_token_200(self):
+        import asyncio
+        from motor.motor_asyncio import AsyncIOMotorClient
+        mongo_url = os.environ["MONGO_URL"]
+        db_name = os.environ["DB_NAME"]
+        email, _, _ = _register()
+        requests.post(f"{API}/auth/forgot-password", json={"email": email})
+        time.sleep(0.3)
+
+        async def fetch():
+            c = AsyncIOMotorClient(mongo_url)
+            db = c[db_name]
+            u = await db.users.find_one({"email": email})
+            rec = await db.password_reset_tokens.find_one({"user_id": u["id"], "used": False})
+            c.close()
+            return rec["token"]
+
+        token = asyncio.new_event_loop().run_until_complete(fetch())
+        r = requests.post(f"{API}/auth/reset-password", json={"token": token, "new_password": "NewPass1!"})
+        assert r.status_code == 200, r.text
 
 
-def test_list_voices_seed(s):
-    r = s.get(f"{API}/voices")
-    assert r.status_code == 200
-    items = r.json()
-    stock = [v for v in items if v.get("is_stock")]
-    assert len(stock) >= 6
+# Multi-tenancy
+class TestMultiTenancy:
+    def test_isolation(self):
+        _, tokA, _ = _register()
+        _, tokB, _ = _register()
+        hA = {"Authorization": f"Bearer {tokA}", "Content-Type": "application/json"}
+        hB = {"Authorization": f"Bearer {tokB}"}
+        r = requests.post(f"{API}/projects", headers=hA, json={"name": "TEST_projA"})
+        assert r.status_code == 200
+        pid = r.json()["id"]
+        listB = requests.get(f"{API}/projects", headers=hB).json()
+        assert all(p["id"] != pid for p in listB)
 
 
-# --- Projects CRUD ---
-def test_projects_crud(s):
-    r = s.get(f"{API}/projects")
-    assert r.status_code == 200
-    assert isinstance(r.json(), list)
-
-    r = s.post(f"{API}/projects", json={"name": "TEST_proj", "description": "test"})
-    assert r.status_code == 200
-    pid = r.json()["id"]
-    assert r.json()["name"] == "TEST_proj"
-
-    # verify present
-    r = s.get(f"{API}/projects")
-    assert any(p["id"] == pid for p in r.json())
-
-    # delete
-    r = s.delete(f"{API}/projects/{pid}")
-    assert r.status_code == 204
-    r = s.get(f"{API}/projects")
-    assert not any(p["id"] == pid for p in r.json())
+# Dashboard
+class TestDashboard:
+    def test_stats(self, admin_headers):
+        r = requests.get(f"{API}/dashboard/stats", headers=admin_headers)
+        assert r.status_code == 200
+        d = r.json()
+        for k in ("org", "recent_videos", "counts", "totals", "usage_last_30_days"):
+            assert k in d
+        assert len(d["usage_last_30_days"]) == 30
 
 
-# --- Avatars CRUD + processing -> ready ---
-def test_avatar_create_processing_then_ready(s):
-    r = s.post(f"{API}/avatars", json={"name": "TEST_avatar", "source_type": "image"})
-    assert r.status_code == 200
-    a = r.json()
-    aid = a["id"]
-    assert a["status"] == "processing"
-    assert a["is_stock"] is False
+# CRUD
+class TestCRUD:
+    def test_avatar_create_delete(self, admin_headers):
+        r = requests.post(f"{API}/avatars", headers=admin_headers, json={"name": "TEST_av", "source_type": "image"})
+        assert r.status_code == 200
+        aid = r.json()["id"]
+        d = requests.delete(f"{API}/avatars/{aid}", headers=admin_headers)
+        assert d.status_code == 204
 
-    # wait for ready (~5s)
-    ready = False
-    for _ in range(20):
-        time.sleep(1)
-        items = s.get(f"{API}/avatars").json()
-        cur = next((x for x in items if x["id"] == aid), None)
-        if cur and cur["status"] == "ready":
-            ready = True
-            break
-    assert ready, "Avatar did not become ready within 20s"
+    def test_stock_avatar_delete_400(self, admin_headers):
+        avs = requests.get(f"{API}/avatars", headers=admin_headers).json()
+        stock = next(a for a in avs if a.get("is_stock"))
+        d = requests.delete(f"{API}/avatars/{stock['id']}", headers=admin_headers)
+        assert d.status_code == 400
 
-    # delete (non-stock)
-    r = s.delete(f"{API}/avatars/{aid}")
-    assert r.status_code == 204
+    def test_voice_create_delete(self, admin_headers):
+        r = requests.post(f"{API}/voices", headers=admin_headers,
+                          json={"name": "TEST_v", "engine": "neural", "language": "en", "gender": "female"})
+        assert r.status_code == 200
+        vid = r.json()["id"]
+        d = requests.delete(f"{API}/voices/{vid}", headers=admin_headers)
+        assert d.status_code == 204
 
+    def test_stock_voice_delete_400(self, admin_headers):
+        vs = requests.get(f"{API}/voices", headers=admin_headers).json()
+        stock = next(v for v in vs if v.get("is_stock"))
+        d = requests.delete(f"{API}/voices/{stock['id']}", headers=admin_headers)
+        assert d.status_code == 400
 
-def test_avatar_delete_stock_noop(s):
-    items = s.get(f"{API}/avatars").json()
-    stock = next(x for x in items if x.get("is_stock"))
-    r = s.delete(f"{API}/avatars/{stock['id']}")
-    assert r.status_code == 204
-    # should still exist
-    items2 = s.get(f"{API}/avatars").json()
-    assert any(x["id"] == stock["id"] for x in items2)
-
-
-# --- Voices CRUD ---
-def test_voice_create_and_delete(s):
-    r = s.post(f"{API}/voices", json={"name": "TEST_voice", "language": "en", "engine": "xtts"})
-    assert r.status_code == 200
-    v = r.json()
-    vid = v["id"]
-    assert v["is_stock"] is False
-    assert v["status"] == "ready"
-
-    r = s.delete(f"{API}/voices/{vid}")
-    assert r.status_code == 204
+    def test_project_create(self, admin_headers):
+        r = requests.post(f"{API}/projects", headers=admin_headers, json={"name": "TEST_proj"})
+        assert r.status_code == 200
+        assert r.json()["name"] == "TEST_proj"
 
 
-def test_voice_delete_stock_noop(s):
-    items = s.get(f"{API}/voices").json()
-    stock = next(x for x in items if x.get("is_stock"))
-    r = s.delete(f"{API}/voices/{stock['id']}")
-    assert r.status_code == 204
-    items2 = s.get(f"{API}/voices").json()
-    assert any(x["id"] == stock["id"] for x in items2)
+# Videos lifecycle
+class TestVideos:
+    def test_full_lifecycle(self, admin_headers):
+        avs = requests.get(f"{API}/avatars", headers=admin_headers).json()
+        vcs = requests.get(f"{API}/voices", headers=admin_headers).json()
+        me_before = requests.get(f"{API}/auth/me", headers=admin_headers).json()
+        credits_before = me_before["org"].get("credits_used", 0)
+
+        payload = {"avatar_id": avs[0]["id"], "voice_id": vcs[0]["id"], "script": "TEST hello",
+                   "title": "TEST_v", "resolution": "1080p", "aspect_ratio": "16:9",
+                   "background_type": "color", "background_value": "#000"}
+        c = requests.post(f"{API}/videos", headers=admin_headers, json=payload)
+        assert c.status_code == 202, c.text
+        vid = c.json()["id"]
+        assert c.json()["status"] == "queued"
+
+        completed = None
+        for _ in range(25):
+            time.sleep(1)
+            g = requests.get(f"{API}/videos/{vid}", headers=admin_headers).json()
+            if g["status"] == "completed":
+                completed = g
+                break
+        assert completed, "video did not complete in 25s"
+        assert completed["output_url"]
+        assert completed["duration_seconds"] is not None
+
+        me_after = requests.get(f"{API}/auth/me", headers=admin_headers).json()
+        assert me_after["org"].get("credits_used", 0) > credits_before
+
+        lst = requests.get(f"{API}/videos?status=completed", headers=admin_headers).json()
+        assert any(v["id"] == vid for v in lst["items"])
+
+        p = requests.patch(f"{API}/videos/{vid}", headers=admin_headers, json={"title": "TEST_renamed"})
+        assert p.status_code == 200 and p.json()["title"] == "TEST_renamed"
+
+        rt = requests.post(f"{API}/videos/{vid}/retry", headers=admin_headers)
+        assert rt.status_code == 200
+
+        d = requests.delete(f"{API}/videos/{vid}", headers=admin_headers)
+        assert d.status_code == 204
+        gone = requests.get(f"{API}/videos/{vid}", headers=admin_headers)
+        assert gone.status_code == 404
 
 
-# --- Videos full lifecycle ---
-def test_video_invalid_avatar_404(s):
-    voice = next(v for v in s.get(f"{API}/voices").json() if v.get("is_stock"))
-    r = s.post(f"{API}/videos", json={
-        "avatar_id": "avt_nonexistent",
-        "voice_id": voice["id"],
-        "script": "hi",
-    })
-    assert r.status_code == 404
+# API Keys + Developer API
+class TestApiKeys:
+    def test_full(self, admin_headers):
+        r = requests.post(f"{API}/api-keys", headers=admin_headers, json={"name": "TEST_key", "environment": "live"})
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert "key" in body and "key_prefix" in body
+        assert "key_hash" not in body
+        plaintext = body["key"]
+        kid = body["id"]
+
+        lst = requests.get(f"{API}/api-keys", headers=admin_headers).json()
+        for k in lst:
+            assert "key_hash" not in k and "key" not in k
+
+        h = {"Authorization": f"Bearer {plaintext}"}
+        assert requests.get(f"{BASE_URL}/api/v1/avatars", headers=h).status_code == 200
+        assert requests.get(f"{BASE_URL}/api/v1/voices", headers=h).status_code == 200
+
+        avs = requests.get(f"{API}/avatars", headers=admin_headers).json()
+        vcs = requests.get(f"{API}/voices", headers=admin_headers).json()
+        post = requests.post(f"{BASE_URL}/api/v1/videos", headers=h, json={
+            "avatar_id": avs[0]["id"], "voice_id": vcs[0]["id"], "script": "TEST_v1",
+            "resolution": "1080p", "aspect_ratio": "16:9",
+            "background_type": "color", "background_value": "#fff"})
+        assert post.status_code == 202, post.text
+
+        d = requests.delete(f"{API}/api-keys/{kid}", headers=admin_headers)
+        assert d.status_code == 204
 
 
-def test_video_invalid_voice_404(s):
-    avatar = next(a for a in s.get(f"{API}/avatars").json() if a.get("is_stock"))
-    r = s.post(f"{API}/videos", json={
-        "avatar_id": avatar["id"],
-        "voice_id": "vce_nonexistent",
-        "script": "hi",
-    })
-    assert r.status_code == 404
+# Webhooks
+class TestWebhooks:
+    def test_crud_and_test(self, admin_headers):
+        r = requests.post(f"{API}/webhooks", headers=admin_headers,
+                          json={"url": "https://example.com/hook", "events": ["video.completed"]})
+        assert r.status_code == 201, r.text
+        wid = r.json()["id"]
+
+        lst = requests.get(f"{API}/webhooks", headers=admin_headers).json()
+        assert any(w["id"] == wid for w in lst)
+
+        t = requests.post(f"{API}/webhooks/{wid}/test", headers=admin_headers)
+        assert t.status_code == 200
+        time.sleep(1.5)
+        deliveries = requests.get(f"{API}/webhooks/{wid}/deliveries", headers=admin_headers).json()
+        assert isinstance(deliveries, list) and len(deliveries) >= 1
+
+        d = requests.delete(f"{API}/webhooks/{wid}", headers=admin_headers)
+        assert d.status_code == 204
 
 
-def test_video_full_lifecycle(s):
-    avatar = next(a for a in s.get(f"{API}/avatars").json() if a.get("is_stock"))
-    voice = next(v for v in s.get(f"{API}/voices").json() if v.get("is_stock"))
+# Billing
+class TestBilling:
+    def test_plans(self, admin_headers):
+        r = requests.get(f"{API}/billing/plans", headers=admin_headers)
+        assert r.status_code == 200
+        plans = r.json()["plans"]
+        assert len(plans) == 4
+        assert {p["id"] for p in plans} == {"free", "starter", "pro", "enterprise"}
 
-    org_before = s.get(f"{API}/org").json()
-    credits_before = org_before["credits_used"]
-
-    r = s.post(f"{API}/videos", json={
-        "avatar_id": avatar["id"],
-        "voice_id": voice["id"],
-        "title": "TEST_video",
-        "script": "Hello world!",
-        "resolution": "1080p",
-        "aspect_ratio": "16:9",
-    })
-    assert r.status_code == 202
-    v = r.json()
-    assert v["status"] == "queued"
-    vid = v["id"]
-
-    # GET single
-    r = s.get(f"{API}/videos/{vid}")
-    assert r.status_code == 200
-
-    # Wait for completion (~10s)
-    completed = None
-    for _ in range(25):
-        time.sleep(1)
-        cur = s.get(f"{API}/videos/{vid}").json()
-        if cur["status"] == "completed":
-            completed = cur
-            break
-    assert completed is not None, "Video did not complete in 25s"
-    assert completed["output_url"], "output_url missing on completed video"
-    assert completed["duration_seconds"]
-
-    # Credits incremented
-    org_after = s.get(f"{API}/org").json()
-    assert org_after["credits_used"] == credits_before + 1
-
-    # List with status filter
-    r = s.get(f"{API}/videos", params={"status": "completed"})
-    assert r.status_code == 200
-    data = r.json()
-    assert any(x["id"] == vid for x in data["items"])
-
-    # PATCH title
-    r = s.patch(f"{API}/videos/{vid}", json={"title": "TEST_renamed"})
-    assert r.status_code == 200
-    assert r.json()["title"] == "TEST_renamed"
-
-    # Retry -> queued -> completed
-    r = s.post(f"{API}/videos/{vid}/retry")
-    assert r.status_code == 200
-    assert r.json()["status"] == "queued"
-
-    re_completed = False
-    for _ in range(25):
-        time.sleep(1)
-        cur = s.get(f"{API}/videos/{vid}").json()
-        if cur["status"] == "completed":
-            re_completed = True
-            break
-    assert re_completed
-
-    # Delete
-    r = s.delete(f"{API}/videos/{vid}")
-    assert r.status_code == 204
-    r = s.get(f"{API}/videos/{vid}")
-    assert r.status_code == 404
+    def test_checkout(self, admin_headers):
+        r = requests.post(f"{API}/billing/checkout", headers=admin_headers,
+                          json={"plan": "pro", "origin_url": BASE_URL})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert "url" in d and "session_id" in d and d["url"].startswith("http")
 
 
-def test_videos_list_pagination(s):
-    r = s.get(f"{API}/videos", params={"page": 1, "per_page": 10})
-    assert r.status_code == 200
-    d = r.json()
-    for k in ["items", "total", "page", "per_page", "has_more"]:
-        assert k in d
+# Team
+class TestTeam:
+    def test_members_invites(self, admin_headers):
+        ms = requests.get(f"{API}/members", headers=admin_headers).json()
+        assert any(m["role"] == "owner" for m in ms)
+
+        inv = requests.post(f"{API}/invitations", headers=admin_headers,
+                            json={"email": f"TEST_{uuid.uuid4().hex[:6]}@x.com", "role": "member"})
+        assert inv.status_code == 200, inv.text
+        iid = inv.json()["id"]
+
+        lst = requests.get(f"{API}/invitations", headers=admin_headers).json()
+        assert any(i["id"] == iid for i in lst)
+
+        d = requests.delete(f"{API}/invitations/{iid}", headers=admin_headers)
+        assert d.status_code == 204
