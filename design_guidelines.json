@@ -1,0 +1,178 @@
+{
+  "project_name": "AvatarPlatform",
+  "theme_and_archetype": {
+    "theme": "Dark",
+    "archetype": "Archetype 4 (Swiss & High-Contrast) + Cinematic Production",
+    "rationale": "As a video creation platform, the UI must recede so the content (avatars/video) becomes the hero. A stark, high-contrast dark mode mimics professional editing software (e.g., Premiere, Resolve), establishing authority and avoiding the generic glowing-neon 'AI tool' slop."
+  },
+  "typography": {
+    "fonts": {
+      "heading": {
+        "family": "Cabinet Grotesk",
+        "fallback": "sans-serif",
+        "import_url": "https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700;800&display=swap",
+        "usage": "H1, H2, Dashboard widget titles. Use tracking-tight."
+      },
+      "body": {
+        "family": "Manrope",
+        "fallback": "sans-serif",
+        "import_url": "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap",
+        "usage": "All body text, forms, navigation. Highly legible at small sizes."
+      },
+      "mono": {
+        "family": "JetBrains Mono",
+        "fallback": "monospace",
+        "import_url": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap",
+        "usage": "Credit counters, video durations, character counts, technical metadata."
+      }
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl font-bold tracking-tight text-foreground",
+      "h2": "text-2xl sm:text-3xl font-semibold tracking-tight text-foreground",
+      "h3": "text-xl font-medium tracking-tight",
+      "h4": "text-sm font-semibold tracking-wider uppercase text-muted-foreground",
+      "body": "text-sm text-foreground/80 leading-relaxed",
+      "small": "text-xs text-muted-foreground"
+    }
+  },
+  "colors": {
+    "css_variables": {
+      "root": {
+        "--background": "0 0% 100%",
+        "--foreground": "0 0% 4%",
+        "--card": "0 0% 98%",
+        "--card-foreground": "0 0% 4%",
+        "--popover": "0 0% 100%",
+        "--popover-foreground": "0 0% 4%",
+        "--primary": "0 0% 9%",
+        "--primary-foreground": "0 0% 98%",
+        "--secondary": "0 0% 96%",
+        "--secondary-foreground": "0 0% 9%",
+        "--muted": "0 0% 96%",
+        "--muted-foreground": "0 0% 45%",
+        "--accent": "0 0% 96%",
+        "--accent-foreground": "0 0% 9%",
+        "--border": "0 0% 90%",
+        "--input": "0 0% 90%",
+        "--ring": "0 0% 9%"
+      },
+      "dark": {
+        "--background": "0 0% 3%",
+        "--foreground": "0 0% 98%",
+        "--card": "0 0% 6%",
+        "--card-foreground": "0 0% 98%",
+        "--popover": "0 0% 6%",
+        "--popover-foreground": "0 0% 98%",
+        "--primary": "0 0% 98%",
+        "--primary-foreground": "0 0% 3%",
+        "--secondary": "0 0% 12%",
+        "--secondary-foreground": "0 0% 98%",
+        "--muted": "0 0% 12%",
+        "--muted-foreground": "0 0% 60%",
+        "--accent": "0 84% 60%",
+        "--accent-foreground": "0 0% 98%",
+        "--border": "0 0% 12%",
+        "--input": "0 0% 12%",
+        "--ring": "0 0% 20%"
+      }
+    },
+    "semantic": {
+      "primary_action": "White text on black (Light mode) / Black text on white (Dark mode). Stark contrast.",
+      "generate_button": "Use hsl(0, 84%, 60%) (Signal Red) for the 'Generate Video' actions to mimic a recording studio 'REC' button. This stands out against the monochrome UI.",
+      "statuses": {
+        "completed": "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
+        "processing": "text-blue-400 bg-blue-400/10 border-blue-400/20 (Animated pulse)",
+        "queued": "text-amber-500 bg-amber-500/10 border-amber-500/20",
+        "failed": "text-red-500 bg-red-500/10 border-red-500/20"
+      }
+    }
+  },
+  "layout_and_spacing": {
+    "dashboard_grid": {
+      "style": "The 'Control Room' Grid",
+      "strategy": "High density, clear functional separation. 1px solid borders, no shadows.",
+      "container": "w-full max-w-screen-2xl mx-auto px-4 md:px-8",
+      "sidebar": "w-64 fixed inset-y-0 left-0 border-r border-border bg-background z-40 hidden lg:block",
+      "main_content": "lg:pl-64 flex flex-col min-h-screen",
+      "topbar": "h-16 border-b border-border bg-background/80 backdrop-blur-xl sticky top-0 z-30 flex items-center justify-between px-6"
+    },
+    "video_editor": {
+      "structure": "3-Column IDE Layout",
+      "left_panel": "w-80 border-r border-border h-[calc(100vh-4rem)] overflow-y-auto p-4 (Avatar & Voice selection)",
+      "center_canvas": "flex-1 flex flex-col h-[calc(100vh-4rem)] bg-muted/30 p-6 (Preview player + Script editor)",
+      "right_panel": "w-72 border-l border-border h-[calc(100vh-4rem)] overflow-y-auto p-4 (Video Settings: Res, BG, Captions)"
+    },
+    "spacing_scale": "Use tight padding (p-4, p-6) for widgets to maintain control room density. Use larger margins (mb-8, mb-12) to separate major sections."
+  },
+  "components": {
+    "cards": {
+      "style": "Flat, 1px border, no box-shadows. Sharp or minimal border-radius (rounded-md).",
+      "classes": "bg-card border border-border rounded-md overflow-hidden"
+    },
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:opacity-90 transition-opacity rounded-md font-medium px-4 py-2",
+      "generate": "bg-accent text-accent-foreground hover:bg-accent/90 transition-colors rounded-md font-semibold px-6 py-2 shadow-[0_0_15px_rgba(239,68,68,0.2)]",
+      "ghost": "hover:bg-muted text-muted-foreground hover:text-foreground transition-colors rounded-md px-3 py-2"
+    },
+    "inputs": {
+      "style": "Subtle borders, dark backgrounds, high focus contrast.",
+      "classes": "bg-background border border-input focus:border-primary focus:ring-1 focus:ring-primary rounded-md px-3 py-2 text-sm",
+      "script_editor": "w-full min-h-[200px] resize-none bg-background border border-input p-4 rounded-md font-body text-base leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary"
+    },
+    "badges": {
+      "style": "Pill-shaped, subtle transparent background with colored border and text.",
+      "classes": "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border"
+    }
+  },
+  "interactions_and_motion": {
+    "hover_states": "All interactive elements MUST have explicit hover states (e.g., hover:bg-muted hover:text-foreground).",
+    "transitions": "Use 'transition-all duration-200 ease-in-out' for standard UI changes.",
+    "micro_interactions": "Avatar cards scale up slightly on hover ('hover:scale-[1.02] transition-transform').",
+    "loading": "Pulse animations on the 'Processing' status badge. Skeleton loaders for video grids while data fetches."
+  },
+  "accessibility": {
+    "testing_ids": "MANDATORY: All buttons, links, inputs, and key info must have 'data-testid' (e.g., data-testid='create-video-btn', data-testid='dashboard-credits').",
+    "contrast": "Ensure text over muted backgrounds meets APCA guidelines. Use text-foreground for primary readable content.",
+    "focus": "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+  },
+  "media_and_assets": {
+    "avatars": [
+      {
+        "url": "https://images.unsplash.com/photo-1573497161161-c3e73707e25c",
+        "description": "Professional female headshot 1",
+        "category": "Avatar Selection"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1560250097-0b93528c311a",
+        "description": "Professional male headshot 1",
+        "category": "Avatar Selection"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1685760259914-ee8d2c92d2e0",
+        "description": "Professional female headshot 2",
+        "category": "Avatar Selection"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1532171875345-9712d9d4f65a",
+        "description": "Cinematic dark portrait female",
+        "category": "Avatar Selection"
+      }
+    ],
+    "logos": [
+      {
+        "url": "https://images.unsplash.com/photo-1555274175-75f4056dfd05",
+        "description": "Minimalist brand logo",
+        "category": "App Logo Placeholder"
+      }
+    ]
+  },
+  "instructions_to_main_agent": {
+    "1": "Enforce Dark Mode by default. The primary app wrapper should have the 'dark' class applied.",
+    "2": "Build pure HTML/Tailwind for layouts and use Shadcn components (heavily styled to match the brutalist/flat aesthetic) for logic.",
+    "3": "Use lucide-react for all icons to maintain consistency.",
+    "4": "The Video Editor must visually separate the setup (Left), script/preview (Center), and output settings (Right) strictly, mimicking an IDE like VS Code or Premiere.",
+    "5": "Do not use standard generic gradients or purple blobs. If background texture is needed, use a faint SVG noise or strict grid lines.",
+    "6": "Use native .js files for React components (as standard for this env, unless you setup TS explicitly), and inject fonts in index.css.",
+    "7": "Do not use placeholder text for images. Use the provided Unsplash URLs."
+  }
+}
