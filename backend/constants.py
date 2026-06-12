@@ -2,10 +2,10 @@ PLAN_CREDITS = {"free": 3, "starter": 50, "pro": 300, "enterprise": 1_000_000}
 PLAN_PRICES = {"starter": 29.00, "pro": 99.00}
 
 SAMPLE_VIDEOS = [
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
+    "https://media.w3.org/2010/05/sintel/trailer.mp4",
+    "https://download.samplelib.com/mp4/sample-10s.mp4",
+    "https://download.samplelib.com/mp4/sample-15s.mp4",
+    "https://download.samplelib.com/mp4/sample-20s.mp4",
 ]
 
 STOCK_AVATARS = [
